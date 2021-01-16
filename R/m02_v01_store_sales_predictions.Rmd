@@ -1,0 +1,481 @@
+---
+title: "m01_v01_store_sales_predictions"
+author: "Data Science in Foco"
+date: "17/12/2020"
+output: 
+    html_document:
+        number_sections: true
+        toc: TRUE
+        toc_float: TRUE
+        
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, fig.width = 13, fig.height = 6, comment = "")
+```
+
+# Importing Needed packages
+
+```{r}
+
+library(tidyverse)
+library(lubridate)
+library(e1071) 
+library(gridExtra)
+library(janitor)
+library(data.table)
+library(funModeling)
+library(kableExtra)
+library(htmltools)
+library(ISOweek)
+
+
+```
+
+
+## Helper Functions
+
+## Reading the data
+
+```{r}
+
+# Dataset of Sales
+df_sales_raw <- data.table::fread("Data/train.csv", stringsAsFactors = T,  na.strings = c("","'","NA"))
+
+# Dataset of Stores
+df_store_raw <- data.table::fread("Data/store.csv", stringsAsFactors = T,  na.strings=c("","'","NA"))
+
+# merge
+df_raw <- merge(df_sales_raw, df_store_raw, by= "Store")
+
+```
+
+
+# Descricption of Data
+
+## Rename Columns
+
+```{r}
+
+#making a copy of the dataset df_raw
+df1 <- df_raw %>% 
+  clean_names()
+
+rmarkdown::paged_table(head(df1))
+
+```
+
+## Data Dimensions
+
+```{r}
+
+print(paste("Number of Rows: " ,nrow(df_raw)))
+print(paste("Number of Cols: " ,ncol(df_raw)))
+
+```
+
+
+## Data Types
+
+```{r}
+
+# converting the "date" feature to datetime
+df1$date <- ymd(df1$date)
+
+glimpse(df1)
+
+```
+
+
+## Checking NA
+
+```{r}
+
+colSums(is.na(df1))
+
+```
+
+## Fillout NA
+
+```{r}
+
+
+
+
+# removing missing values
+df1 <- df1 %>% 
+  mutate(
+    
+    # replace the missing values with the value of 200000
+    competition_distance = ifelse(is.na(competition_distance), 200000, competition_distance),
+    
+    # replace the missing values with the month in the date column     
+    competition_open_since_month = ifelse(is.na(competition_open_since_month), month(date), competition_open_since_month),
+    
+    # replace the missing values with the year in the date column      
+    competition_open_since_year = ifelse(is.na(competition_open_since_year), year(date), competition_open_since_year),
+    
+    # replace the missing values with the week in the date column      
+    promo2since_week = ifelse(is.na(promo2since_week ), week(date), promo2since_week ),
+    
+    # replace the missing values with the year in the date column      
+    promo2since_year = ifelse(is.na(promo2since_year), year(date), promo2since_year),
+         
+    month_map = month(date),
+         
+    month_map = month.abb[month_map])
+
+
+# removing the blanks 
+df1$promo_interval <- str_squish(df1$promo_interval)
+
+# replacing missing values with 0
+df1$promo_interval[df1$promo_interval==""] = "0"
+
+# creating a column with the months that the promotion is active with value 1 and not active with value 0
+df1 <- df1 %>% 
+  mutate(is_promo = ifelse(promo_interval == "0",0,ifelse(str_detect(promo_interval, month_map),1,0)))
+
+# viewing a random sample of the data
+
+kable(t(df1[sample(nrow(df1), 5), ])) %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"),html_font = "Cambria")
+
+```
+
+
+## Change Types
+
+```{r}
+
+df1 <- df1 %>% 
+  mutate(competition_distance = as.integer(competition_distance),
+         month_map = as.factor(month_map))
+
+```
+
+## Descriptive Statistics
+
+```{r}
+
+# selecting only numeric features
+num_attributes <- df1 %>% 
+  keep(is.numeric)
+
+# selecting only categorical features
+cat_attributes <- df1 %>% 
+  keep(is.factor)
+
+```
+
+### Numeric Attributes
+
+```{r}
+
+
+
+# Central Tendency  - mean , median
+num_mean <- as.data.frame( t(lapply(num_attributes, mean)))
+
+num_median <- as.data.frame( t(lapply(num_attributes, median)))
+
+# dispersion - std, min, max, range, skew, kurtosis
+num_std <- as.data.frame( t(lapply(num_attributes, sd)))
+
+num_min <- as.data.frame( t(lapply(num_attributes, min)))
+
+num_max <- as.data.frame( t(lapply(num_attributes, max)))
+
+num_skew <- as.data.frame( t(lapply(num_attributes, skewness)))
+
+num_kurt <- as.data.frame( t(lapply(num_attributes, kurtosis)))
+
+table_desc <- t(bind_rows(num_min,num_max,num_mean,num_median,num_std,num_skew,num_kurt))
+
+table_desc<- as.data.frame(table_desc)
+
+
+names(table_desc) <- c("min","max","mean","median","std","skew", "kurtosis")
+
+
+kable(table_desc, digits = 4) %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"),html_font = "Cambria")
+
+```
+
+```{r, out.width="200%", out.height="200%"}
+
+
+
+df1 %>% 
+  ggplot(aes(sales))+
+  geom_histogram(aes(y =..density..),col="black", fill="steelblue")+
+  stat_function(fun = dnorm, args = list(mean = mean(df1$sales), sd = sd(df1$sales)), col="red", lwd=1)
+
+```
+
+### Categorical Attributes
+
+```{r}
+
+apply(cat_attributes, 2, function(x) length(unique(x)))
+
+```
+
+```{r, fig.height= 8}
+
+boxplot_01 <- df1 %>% 
+  filter(state_holiday != 0 & sales > 0 ) %>% 
+  ggplot(aes(x = state_holiday, y = sales, fill=state_holiday))+
+  scale_y_continuous(breaks = seq(0,40000,5000))+
+  geom_boxplot()
+
+
+
+boxplot_02 <- df1 %>% 
+  filter(state_holiday != 0 & sales > 0 ) %>% 
+  ggplot(aes(x = store_type, y = sales, fill=store_type))+
+  scale_y_continuous(breaks = seq(0,40000,5000))+
+  geom_boxplot()
+
+boxplot_03 <- df1 %>% 
+  filter(state_holiday != 0 & sales > 0 ) %>% 
+  ggplot(aes(x = assortment, y = sales, fill=assortment))+
+  scale_y_continuous(breaks = seq(0,40000,5000))+
+  geom_boxplot()
+
+grid.arrange(boxplot_01,boxplot_02,boxplot_03,nrow= 2,ncol=2)
+
+```
+
+# Feature Engineering
+
+```{r}
+
+df2 <- df1
+
+```
+
+## Mindmap Hypotheses
+
+```{r 2.1. Mindmap Hypotheses, echo=FALSE, fig.cap="Mindmap Hypotheses", out.width = '100%'}
+knitr::include_graphics("img/MindMapsHypothesis.png")
+```
+
+## Creation of Hypotheses
+
+
+**1.** Lojas com número maior de funcionários deveriam vender mais.  
+**1.** Stores with more employees should sell more.  
+
+**2.** Lojas com maior capacidade de estoque deveriam vender mais.  
+**2.** Stores with greater inventory capacity should sell more.  
+
+**3.** Lojas com maior porte deveriam vender mais.  
+**3.** Larger stores should sell more.  
+
+**4.** Lojas com maior sortimentos deveriam vender mais.  
+**4.** Stores with larger assortments should sell more.  
+
+**5.** Lojas com competidores mais próximos deveriam vender menos.  
+**5.** Stores with closer competitors should sell less.  
+
+**6.** Lojas com competidores à mais tempo deveriam vendem mais.  
+**6.** Stores with longer competitors should sell more.  
+
+
+
+### 2.2.2. Products Hypotheses  
+
+**1.** Lojas que investem mais em Marketing deveriam vender mais.  
+**1.** Stores that invest more in Marketing should sell more.  
+
+**2.** Lojas com maior exposição de produto deveriam vender mais.  
+**2.** Stores with greater product exposure should sell more.  
+
+**3.** Lojas com produtos com preço menor deveriam vender mais.  
+**3.** Stores with lower priced products should sell more.  
+
+**4. **Lojas com promoções mais agressivas ( descontos maiores ), deveriam vender mais.  
+**4.** Stores with more aggressive promotions (bigger discounts), should sell more.  
+
+**5.** Lojas com promoções ativas por mais tempo deveriam vender mais.  
+**5.** Stores with active promotions for longer should sell more.  
+
+**6.** Lojas com mais dias de promoção deveriam vender mais.  
+**6.** Stores with more promotion days should sell more.  
+
+**7.** Lojas com mais promoções consecutivas deveriam vender mais.  
+**7.** Stores with more consecutive promotions should sell more.  
+
+
+
+### 2.2.3. Time Hypotheses  
+
+**1.** Lojas abertas durante o feriado de Natal deveriam vender mais.  
+**1.** Stores open during the Christmas holiday should sell more.  
+
+**2.** Lojas deveriam vender mais ao longo dos anos.  
+**2.** Stores should sell more over the years.  
+
+**3.** Lojas deveriam vender mais no segundo semestre do ano.  
+**3.** Stores should sell more in the second half of the year.  
+
+**4.** Lojas deveriam vender mais depois do dia 10 de cada mês.  
+**4.** Stores should sell more after the 10th of each month.  
+
+**5.** Lojas deveriam vender menos aos finais de semana.  
+**5.** Stores should sell less on weekends.  
+
+**6.** Lojas deveriam vender menos durante os feriados escolares.  
+**6.** Stores should sell less during school holidays.  
+
+
+
+## 2.3. Final List of Hypotheses  
+
+**1.** Lojas com maior sortimentos deveriam vender mais.  
+**1.** Stores with larger assortments should sell more.  
+
+**2.** Lojas com competidores mais próximos deveriam vender menos.  
+**2.** Stores with closer competitors should sell less.  
+
+**3.** Lojas com competidores à mais tempo deveriam vendem mais.  
+**3.** Stores with longer competitors should sell more.  
+
+**4.** Lojas com promoções ativas por mais tempo deveriam vender mais.  
+**4.** Stores with active promotions for longer should sell more.  
+
+**5.** Lojas com mais dias de promoção deveriam vender mais.  
+**5.** Stores with more promotion days should sell more.  
+
+**6.** Lojas com mais promoções consecutivas deveriam vender mais.  
+**6.** Stores with more consecutive promotions should sell more.  
+
+**7.** Lojas abertas durante o feriado de Natal deveriam vender mais.  
+**7.** Stores open during the Christmas holiday should sell more.  
+
+**8.** Lojas deveriam vender mais ao longo dos anos.  
+**8.** Stores should sell more over the years.  
+
+**9.** Lojas deveriam vender mais no segundo semestre do ano.  
+**9.** Stores should sell more in the second half of the year.  
+
+**10.** Lojas deveriam vender mais depois do dia 10 de cada mês.  
+**10.** Stores should sell more after the 10th of each month.  
+
+**11.** Lojas deveriam vender menos aos finais de semana.  
+**11.** Stores should sell less on weekends.  
+
+**12.** Lojas deveriam vender menos durante os feriados escolares.  
+**12.** Stores should sell less during school holidays.  
+
+## Feature Engineering  
+
+```{r}
+
+df2 <- df2 %>% 
+  mutate(
+    
+    # Extracting year
+    year = as.integer(year(date)),
+    
+    # Extracting month
+    month = month(date),
+    
+    # Extracting day
+    day = day(date),
+    
+    #Extracting week of the year
+    week_of_year = week(date),
+    
+    # Extracting year and week
+    year_week = strftime(date, format = "%Y-%W"),
+    
+    # Extracting first day of the month
+    first_day_of_month = "01",
+    
+    # Turning into Date
+    competition_since = make_date(competition_open_since_year, competition_open_since_month,first_day_of_month),
+    
+    # Getting the difference in days
+    competition_time_month = as.integer(difftime(date, competition_since, units = "days")/30)
+        
+        )
+
+
+# this is function to convert year-week to year-month-day
+data_da_semana <- function(ano, semana, diadasemana){
+  w <- paste0(ano, "-W", sprintf("%02d", semana), "-", diadasemana)
+  ISOweek2date(w)-1
+}
+
+df2 <- df2 %>% 
+  mutate(
+    
+    # convert year-week to year-month-day
+    promo_since = data_da_semana(promo2since_year, promo2since_week, 1),
+         
+    # Getting the difference in days
+    promo_time_week = difftime(date, promo_since, units = "days")/7,
+         
+    # converting to integer
+    promo_time_week = as.integer(promo_time_week),
+         
+    assortment = case_when(
+                          # changing from a to basic  
+                           assortment == "a" ~ "basic",
+                          
+                           # changing from b to extra 
+                           assortment == "b" ~ "extra",
+                                
+                           # everything else for extended
+                           T ~ "extended"),
+    
+    state_holiday = case_when(
+                           # changing from a to public_holiday  
+                           state_holiday == "a" ~ "public_holiday",
+                                   
+                           # changing from b to easter_holiday
+                           state_holiday == "b" ~ "easter_holiday",
+                                   
+                           # changing from b to christmas
+                           state_holiday == "c" ~ "christmas",
+                           
+                           # everything else for regular_day     
+                           T ~ "regular_day"))
+
+```
+
+# Variable filtering
+
+```{r}
+
+df3 <- df2
+
+```
+
+
+## Rows Filtering
+
+```{r}
+
+# Removing the records of the days the stores are closed and thus obtaining only sales with values> 0
+df3 <- 
+  df3 %>% 
+  filter(open != 0 & sales > 0)
+
+```
+
+
+## Columns Filtering
+
+```{r}
+
+# Removing features that were not available at the time of production and will not be needed.
+df3 <- df3 %>% 
+  select(-customers, -open, -promo_interval, -month_map)
+
+```
+
