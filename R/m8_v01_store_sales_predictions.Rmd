@@ -1,0 +1,724 @@
+---
+title: "m08_v01_store_sales_predictions"
+author: "Data Science in Foco"
+date: "17/12/2020"
+output: 
+    html_document:
+        number_sections: true
+        #toc: TRUE
+        #toc_float: TRUE
+        
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = F, warning = F, fig.width = 13, fig.height = 8, comment = "")
+```
+
+# Importing Needed packages
+
+```{r}
+
+library(tidyverse)
+library(kableExtra)
+library(htmltools)
+library(Metrics)
+library(tidymodels)
+library(timetk)
+library(doParallel)
+library(plotly)
+library(formattable)
+library(timetk)
+library(ggpubr)
+theme_set(theme_minimal())
+
+
+
+```
+
+
+## Helper Functions
+
+```{r}
+
+minmax_scaler <- function(x) {
+  
+    
+   return( ( x - min( x ) )  / ( max(x) - min(x) ) ) 
+}
+
+
+robust_scaler <- function(x){
+  
+  return( ( x - quantile( x , 0.5) )  / ( quantile(x ,0.75) - quantile(x, 0.25) ) )
+  
+}
+
+
+ml_error <-  function(model_name = "Linear Regression Model",model_predictions){
+  MAE <- model_predictions %>%
+    yardstick::mae( actual,predictions)
+
+  MAPE <- model_predictions %>%
+    yardstick::mape( actual,predictions)
+
+  RMSE <- model_predictions %>%
+    yardstick::rmse( actual, predictions)
+
+  data.frame(Model_Name = model_name, MAE= round(MAE$.estimate,3), MAPE = round(MAPE$.estimate,3), RMSE = round(RMSE$.estimate, 3))  
+  
+} 
+
+
+# TimeSeries cross validation function
+cross_validation <- function(data_training, kfold , Model_name, model){
+  
+mae_list  <- c()
+mape_list <- c()
+rmse_list <- c() 
+  
+for (k in seq(kfold ,1)){
+  print(paste("kfolds number", k))
+    
+  validation_start_date <- max(data_train$date) - as.difftime(k*6*7, units = "days")
+    
+  validation_end_date <- max(data_train$date) - as.difftime((k-1)*6*7, units = "days")
+    
+  data_training <- data_train %>% 
+    filter(date < validation_start_date)
+    
+  data_validation <- data_train %>% 
+    filter(date >= validation_start_date & date <= validation_end_date)
+    
+  lm_fit_cv <- model %>% fit(sales ~ . , data = data_training)
+    
+  lm_pred_cv <- lm_fit_cv %>% predict(data_validation) %>% 
+    bind_cols(data_validation$sales) %>% 
+    rename(predictions = ".pred", actual = "...2")
+    
+  lm_result_cv <- ml_error("Linear Regression Model",lm_pred_cv) 
+    
+  
+    # store performance of each kfold iteration
+  mae_list [k] <- unlist( lm_result_cv['MAE']   , use.names=FALSE) 
+  mape_list[k] <- unlist( lm_result_cv['MAPE']  , use.names=FALSE )
+  rmse_list[k] <- unlist( lm_result_cv['RMSE']  , use.names=FALSE)
+    
+  
+    
+  }
+  
+ return( tibble( Model_name = Model_name,
+                 MAE = paste( round(mean(mae_list),2)," +/- ",   round(sd(mae_list),  2)),
+                 MAPE = paste( round(mean(mape_list),2)," +/- ", round(sd(mape_list), 2)),
+                 RMSE = paste( round(mean(rmse_list),2)," +/- ", round(sd(rmse_list), 2))) )  
+  
+}
+
+```
+
+
+## Reading the data
+
+```{r}
+
+# Dataset of Sales
+df5 <- read_csv("Data/data_modelling.csv")
+
+```
+
+## Manual Feature Selection
+
+```{r}
+
+df6 <-  as_tibble(df5) %>% 
+  select(-X1)
+
+```
+
+
+```{r}
+
+# Boruta selected features
+cols_selected_boruta_full <- c("store","store_type","promo", "assortment", "competition_distance", "competition_open_since_month",
+    "competition_open_since_year","promo2","promo2since_week","promo2since_year", "competition_time_month",
+    "promo_time_week", "day_of_week_sin", "day_of_week_cos", "month_sin","month_cos", "day_sin", "day_cos",
+    "week_of_year_sin", "week_of_year_cos", "sales", "date")
+
+```
+
+# Machine Learning Modelling
+
+```{r}
+
+df6 <- df6 %>% 
+  select(cols_selected_boruta_full) %>% 
+  mutate(sales = expm1(sales))
+
+
+# Splitthe set in training and testing
+data_split <- df6 %>%  time_series_split(assess = "6 weeks", cumulative = T)
+
+# Dataset Train
+data_train <- training(data_split) 
+  
+
+# Dataset Test
+data_test <- testing(data_split)
+
+rec <- recipe(sales~.,data_train) 
+
+cv <- vfold_cv(data_train, repeats = )
+
+# Selected metrics 
+mt <- metric_set(yardstick::rmse, yardstick::mae, yardstick::mape)
+
+
+```
+
+## Average Model
+
+```{r}
+
+aux1 <- data_test %>% 
+  select(store, sales)
+
+aux2 <- data_test %>% 
+  group_by(store) %>% 
+  summarise(predictions = mean(sales))
+  
+avg_model <- aux1 %>% 
+  left_join(aux2, by= "store") %>% 
+  select(sales, predictions) %>% 
+  rename(actual = "sales")
+
+baseline_result <- ml_error("Average Model",avg_model)
+
+baseline_result
+
+```
+
+
+## Linear Regression Model
+
+
+```{r}
+
+# Create Linear Regresion Model
+#lm <-
+#  linear_reg() %>% 
+#  set_engine("lm") %>% 
+#  set_mode("regression")
+ 
+# Training Model
+#lm_fit <- lm %>%
+#  fit(sales ~ . , data = data_train)
+
+# Preditions
+#lm_pred <- lm_fit %>% 
+#  predict(data_test) %>% 
+#  bind_cols(data_test$sales) %>% 
+#  rename(predictions = ".pred", actual = "...2")
+  
+# Evaluate
+#lm_result <- ml_error("Linear Regression Model",lm_pred)
+
+# Save pickle of results
+#saveRDS(lm_result,"Resultados_Modelos/lm_result.rds")
+
+lm_result <- readRDS("Resultados_Modelos/lm_result.rds")
+
+lm_result %>% 
+  kable() %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+## Linear Regression Model - Cross Validation
+
+```{r}
+
+#lm_result_cv <- cross_validation(data_training , 5, "Linear Regression Model Cross Validation", lm)
+
+# Save pickle of results
+#saveRDS(lm_result_cv,"Resultados_Modelos/lm_result_cv.rds")
+
+lm_result_cv <- readRDS("Resultados_Modelos/lm_result_cv.rds")
+
+lm_result_cv %>% 
+   kable() %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+## Random Forest Model 
+
+```{r}
+
+# Create Non-linear Model RandomForest
+#rf <-
+#  rand_forest(trees = 100) %>% 
+#  set_engine("ranger") %>% 
+#  set_mode("regression")
+
+# Training Model
+#rf_fit <- rf %>%
+#  fit(sales ~ ., data = data_train)
+
+
+# Preditions
+#rf_pred <- rf_fit %>% 
+#   predict(data_test) %>% 
+#  bind_cols(data_test$sales) %>% 
+#  rename(predictions = ".pred", actual = "...2")
+
+
+#rf_result <- ml_error("Random Forest Model",rf_pred)  
+
+# Save pickle of results
+#saveRDS(rf_result,"Resultados_Modelos/rf_result.rds")
+
+rf_result <- readRDS("Resultados_Modelos/rf_result.rds")
+
+rf_result %>% 
+  kable() %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+## Random Forest Model - Cross Validation
+
+```{r}
+
+#rf_result_cv <- cross_validation(data_training , 5, "Random Forest Model Cross Validation", rf)
+
+# Save pickle of results
+#saveRDS(rf_result_cv,"Resultados_Modelos/rf_result_cv.rds")
+
+rf_result_cv <- readRDS("Resultados_Modelos/rf_result_cv.rds")
+
+rf_result_cv %>% 
+   kable() %>% 
+   kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+
+## Xgboosting Model 
+
+```{r}
+
+# Create Model
+#xg <-
+#  boost_tree(trees = 100) %>% 
+#  set_engine("xgboost") %>% 
+#  set_mode("regression")
+
+# Training Model
+#xg_fit <- xg %>%
+#  fit(sales ~ ., data = data_train)
+
+
+# Preditions
+#xg_pred <- xg_fit %>% 
+#  predict(data_test) %>% 
+#  bind_cols(data_test$sales) %>% 
+#  rename(predictions = ".pred", actual = "...2")
+
+xg_result <- readRDS("Resultados_Modelos/xg_result.rds")
+
+# Evaluate
+#xg_result <- ml_error("Xgboosting Model",xg_pred)
+
+# Save pickle of results
+#saveRDS(xg_result,"Resultados_Modelos/xg_result.rds")
+
+xg_result %>% 
+  kable() %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+
+```{r}
+
+result_xg_cv <- readRDS("Resultados_Modelos/result_xg_cv.rds")
+
+#result_xg_cv <- cross_validation(data_training , 5, "Xgboosting Model Cross Validation", xg)
+
+# Save pickle of results
+#saveRDS(result_xg_cv,"Resultados_Modelos/result_xg_cv.rds")
+
+result_xg_cv %>% 
+   kable() %>% 
+   kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+## Comparing Model Performances
+
+### Single Performances
+
+```{r}
+
+bind_rows(baseline_result, lm_result, rf_result, xg_result) %>% 
+  arrange(RMSE) %>% 
+  kable() %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+
+### Real Performance - Cross Validation
+
+```{r}
+
+bind_rows( lm_result_cv, rf_result_cv, result_xg_cv) %>% 
+  arrange(RMSE) %>% 
+  kable() %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+# HYPERPARAMETER FINE TUNING
+
+## Creating parameter grid
+
+```{r}
+
+#xgb_spec <- boost_tree(
+#  trees = 1000, 
+#  tree_depth = tune(), min_n = tune(), 
+#  loss_reduction = tune(),                     
+#  sample_size = tune(), mtry = tune(),         
+#  learn_rate = tune(),                         
+#) %>% 
+#  set_engine("xgboost") %>% 
+#  set_mode("regression")
+
+
+#xgb_grid <- grid_latin_hypercube(
+  
+  
+#  tree_depth(),
+#  min_n(),
+#  loss_reduction(),
+#  sample_size = sample_prop(),
+#  finalize(mtry(), data_train),
+#  learn_rate(),
+#  size = 10
+#)
+
+```
+
+## Tuning Xgboost Model
+
+```{r}
+
+#xgb_wf <- workflow() %>%
+#  add_formula(sales ~ .) %>%
+#  add_model(xgb_spec)#
+
+#set.seed(234)
+
+#all_cores <- parallel::detectCores(logical = FALSE)
+
+
+#cl <- makePSOCKcluster(all_cores - 1)
+#registerDoParallel(cl)
+
+
+#xgb_res <- tune_grid(
+#  xgb_wf,
+#  resamples = cv,
+#  grid = xgb_grid,metrics = mt,
+#  control = control_grid(save_pred = TRUE)
+#)
+
+```
+
+## Results and Metrics
+
+```{r}
+
+#xgb_res<- readRDS("Resultados_Modelos/xgb_res.rds")
+
+#xgb_res %>%
+#  collect_metrics() %>%
+#  filter(.metric == "rmse") %>%
+#  select(mean, mtry:sample_size) %>%
+#  pivot_longer(mtry:sample_size,
+#               values_to = "value",
+#               names_to = "parameter"
+#  ) %>%
+#  ggplot(aes(value, mean, color = parameter)) +
+#  geom_point(alpha = 0.8, show.legend = FALSE) +
+#  facet_wrap(~parameter, scales = "free_x") +
+#  labs(x = NULL, y = "rmse")
+
+```
+
+## Viewing parameters for RMSE metric
+
+```{r}
+
+#best_rmse <- select_best(xgb_res, "rmse")
+#best_rmse
+
+```
+
+## Encapsulating the final parameters
+
+```{r}
+
+#final_xgb <- finalize_workflow(
+#  xgb_wf,
+#  best_rmse
+#)
+
+#final_xgb
+
+```
+
+
+```{r}
+
+#all_cores <- parallel::detectCores(logical = FALSE)
+
+
+#cl <- makePSOCKcluster(all_cores - 1)
+#registerDoParallel(cl)
+
+#final_res <- last_fit(final_xgb, data_split, metrics = mt)
+
+
+#saveRDS(final_res,"Resultados_Modelos/final_res.rds")
+
+#final_res <- readRDS("Resultados_Modelos/final_res.rds")
+
+#collect_metrics(final_res)
+
+
+```
+
+## Final Model
+
+```{r}
+
+# Create Final Model
+#xg <-
+#  boost_tree(trees = 3000, 
+#             tree_depth = 5, 
+#             min_n = 3, 
+#             sample_size = 0.7, 
+#             learn_rate = 0.03, 
+#             mtry = 7, 
+#             loss_reduction = 0.03) %>% 
+#  set_engine("xgboost") %>% 
+#  set_mode("regression")
+
+```
+
+## Viewing the results of the final model
+
+```{r}
+
+#all_cores <- parallel::detectCores(logical = FALSE)
+
+
+#cl <- makePSOCKcluster(all_cores - 1)
+#registerDoParallel(cl)
+
+#xg_fit <- xg %>%
+  #fit(sales ~ ., data = data_train)
+
+#saveRDS(xg_fit,"Resultados_Modelos/xg_fit_final.rds")
+
+xg_fit_final <- readRDS("Resultados_Modelos/xg_fit_final.rds")
+
+# Preditions
+#xg_pred <- xg_fit %>% 
+#  predict(data_test) %>% 
+#  bind_cols(data_test$sales) %>% 
+#  rename(predictions = ".pred", actual = "...2")
+
+#saveRDS(xg_pred,"Resultados_Modelos/xg_pred_final.rds")
+
+xg_pred_final <- readRDS("Resultados_Modelos/xg_pred_final.rds")
+
+# Evaluate
+xg_result_final <- ml_error("Xgboosting Final Model",xg_pred_final)
+
+xg_result_final %>% 
+   kable() %>% 
+   kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+
+```
+
+
+# Business Error Interpretation and Translation
+
+```{r}
+
+df7 <- data_test
+
+df7$predictions <- xg_pred_final$predictions
+
+```
+
+## Business Performance
+
+```{r}
+
+# Total estimated revenue per store.
+df71 <- df7 %>% 
+  group_by(store) %>% 
+  summarise(predictions = sum(predictions), .groups="drop")
+
+# Mean absolute error and Mean absolute percentage error per store
+df72 <- df7 %>%
+  group_by(store) %>%
+  summarise(mae= Metrics::mae(sales, predictions),
+            mape = Metrics::mape(sales, predictions)*100, .groups="drop")
+
+# Merging total forecasted revenue with errors
+df73 <- df71 %>% 
+  inner_join(df72, by="store")
+
+# Creating the best and worst scenario
+df73 <- df73 %>% 
+  mutate(worst_scenario = predictions - mae,
+         best_scenario = predictions + mae) %>% 
+  select(store, predictions, worst_scenario, best_scenario, mae, mape) %>% 
+  arrange(-mape)
+
+rmarkdown::paged_table(head(df73))
+  
+```
+
+
+
+```{r}
+
+# Creating 2 classes to better visualize where the model made predictions more easily and others more difficult.
+df73 <- df73 %>% 
+  mutate(difficulty = ifelse(mape <= 30,"normal_pred", "hard_pred"))
+
+# Creating scatter plot store vs map
+difficult_pred <- df73 %>% 
+  ggplot(aes(store, mape)) + geom_point(aes(shape= difficulty ,col= difficulty), size=2.5, alpha=0.4)+ scale_y_continuous(breaks = seq(0,70,10))+
+  scale_shape_manual(values=c(10, 16))+
+  scale_x_continuous(breaks = seq(0,1500, 100))+
+  labs(title= "store vs mape")+
+  theme(plot.title = element_text(hjust = 0.5, size = 18))
+
+# Transforming into plotly.
+ggplotly(difficult_pred)
+
+```
+
+No gráfico acima é possivel ver em vermelho as lojas que o algoritimo teve mais dificuldade em prever.  
+In the graph above it is possible to see in red the stores that the algorithm had more difficulty in predicting.  
+
+## Total Performance
+
+```{r}
+
+# Predictions in all stores in the next 6 weeks.
+df73 %>% 
+  summarise(predictions= currency(sum(predictions), big.mark = ",", symbol = "R$"),
+            worst_scenario= currency(sum(worst_scenario), big.mark = ",", symbol = "R$"),
+            best_scenario = currency(sum(best_scenario), big.mark = ",", symbol = "R$")) %>% 
+  kable(caption = "Predictions in all stores in the next 6 weeks") %>% 
+  kable_styling(full_width = F, bootstrap_options = c("striped", "hover", "condesend", "responsive"), html_font = "Cambria")
+  
+```
+
+
+## Machine Learning Performance
+
+```{r}
+
+# Creating the error and error_rate features
+df7 <- df7 %>% 
+  mutate(error = sales - predictions,
+         error_rate = predictions / sales)
+
+```
+
+
+```{r}
+
+
+  
+
+```
+
+
+```{r, fig.height= 20}
+
+ggarrange(
+  
+  df7 %>%
+  summarise_by_time(date, .by = "day",error_rate = mean(error_rate)) %>% 
+  ggplot(aes(date, error_rate))+
+  geom_line(lwd=1, col="steelblue")+
+  geom_hline(yintercept=1, linetype="dashed", color = "red", lwd=0.8)+
+  scale_y_continuous(breaks = seq(0, 2, 0.05))+
+  labs(title = "Error_rate vs Date")+  
+  theme(axis.title.x=element_blank(),
+        axis.text.x=element_blank(),
+        axis.ticks.x=element_blank(),plot.title = element_text(hjust = 0.5, size = 18)),
+
+  df7 %>% 
+  group_by(date) %>% 
+  summarise_by_time(date,.by = "day", sales = sum(sales), predictions = sum(predictions), .groups= "drop") %>% 
+  ggplot( ) + aes(x= date) + geom_line(lwd=1,aes(y= sales, col= "sales", group = "sales"))+
+  geom_line(lwd=1,aes(y= predictions, col= "predictions", group = "predictions"))+
+  scale_y_continuous(labels = scales::label_number_si())+
+  scale_x_date(breaks = "1 weeks", minor_breaks = "1 day", date_labels = "%Y-%m-%d")+
+  labs(title= "Date vs Sales/Predictions")+
+  theme(plot.title = element_text(hjust = 0.5, size = 18)),
+
+  df7 %>% 
+  ggplot(aes(predictions, error))+
+  geom_point(alpha=0.4, shape=21, fill="darkgreen", size=2, color="white")+
+  scale_x_continuous(breaks = seq(0,30000,2000))+  
+  labs(title= "Residual Plot")+
+  theme(plot.title = element_text(hjust = 0.5, size = 18)),
+  
+  df7 %>% 
+  ggplot(aes(error))+
+  geom_histogram(aes(y =..density..),col="black", fill="chocolate")+
+  stat_function(fun = dnorm, args = list(mean = mean(df7$error), sd = sd(df7$error)), col="red", lwd=1)+
+  labs(title = "Distribution Error")+
+  theme(plot.title = element_text(hjust = 0.5, size = 18))+
+  scale_y_continuous(labels = function(x) format(x, scientific = FALSE)) ,nrow  =4)
+
+```
+- Erro vs Data: Valores acima da linha vermelha , são dias em que modelo fez uma superestimação, e valore abaixo da linha vermelha são dias em que modelo fez uma substimação.  
+  
+
+- Error_rate vs Date: Values above the red line are days when the model overestimated, and values below the red line are days when the model underestimated.  
+
+```{r}
+
+MPE <- mean((df7$sales - df7$predictions)/df7$sales )
+
+MPE
+
+``` 
+
+Olhando a métrica **MPE** podemos ver que modelo está superestimando, pois valor é negativo, com isso podemos dizer que o modelo está prevendo melhor valores acima do real.  
+
+Looking at the **MPE** metric we can see which model is overestimating, because the value is negative, with that we can say that the model is better predicting values above the real.  
+
+- Data vs Vendas / Predições: Podemos ver que as predições estão bem proximas dos valores reais , e tambem podemos ver os locais onde as erro nas predições são maiores.  
+
+- Date vs Sales/Predictions: We can see that the predictions are very close to the actual values, and we can also see the places where the errors in the predictions are greatest.  
+
+- Distribuição do Erro: Através desse gráfico é possivel ver que erro está bem próximo de uma distribuição normal.  
+- Distribution Error: Through this graph it is possible to see which error is very close to a normal distribution.  
+
+- Predições vs Erro: Neste gráfico de residuos podemos ver que sempre que fizermos predições entre 7000 e 10000, o modelo irá errar mais.  
+- Predictions vs Error: In this residual plot we can see that whenever we make predictions between 7000 and 10000, the model will make more mistakes.  
