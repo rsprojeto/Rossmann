@@ -31,7 +31,6 @@ library(htmltools)
 library(ISOweek)
 library(Metrics)
 library(tidymodels)
-library(modeltime)
 library(timetk)
 
 
@@ -124,7 +123,7 @@ for (k in seq(kfold ,1)){
 ```{r}
 
 # Dataset of Sales
-df5 <- read_csv("Data/data_modelling.csv")
+df5 <- read_csv("/home/renato/repos/Rossmann/inst/Data/data_modelling.csv")
 
 ```
 
@@ -223,7 +222,7 @@ baseline_result
 # Save pickle of results
 #saveRDS(lm_result,"Resultados_Modelos/lm_result.rds")
 
-lm_result <- readRDS("Resultados_Modelos/lm_result.rds")
+lm_result <- readRDS("/home/renato/repos/Rossmann/inst/Resultados_Modelos/lm_result.rds")
 
 lm_result %>% 
   kable() %>% 
@@ -240,7 +239,7 @@ lm_result %>%
 # Save pickle of results
 #saveRDS(lm_result_cv,"Resultados_Modelos/lm_result_cv.rds")
 
-lm_result_cv <- readRDS("Resultados_Modelos/lm_result_cv.rds")
+lm_result_cv <- readRDS("/home/renato/repos/Rossmann/inst/Resultados_Modelos/lm_result_cv.rds")
 
 lm_result_cv
 
@@ -273,7 +272,7 @@ lm_result_cv
 # Save pickle of results
 #saveRDS(rf_result,"Resultados_Modelos/rf_result.rds")
 
-rf_result <- readRDS("Resultados_Modelos/rf_result.rds")
+rf_result <- readRDS("/home/renato/repos/Rossmann/inst/Resultados_Modelos/rf_result.rds")
 
 rf_result %>% 
   kable() %>% 
@@ -290,7 +289,7 @@ rf_result %>%
 # Save pickle of results
 #saveRDS(rf_result_cv,"Resultados_Modelos/rf_result_cv.rds")
 
-rf_result_cv <- readRDS("Resultados_Modelos/rf_result_cv.rds")
+rf_result_cv <- readRDS("/home/renato/repos/Rossmann/inst/Resultados_Modelos/rf_result_cv.rds")
 
 rf_result_cv
 
@@ -318,7 +317,7 @@ rf_result_cv
 #  bind_cols(data_test$sales) %>% 
 #  rename(predictions = ".pred", actual = "...2")
 
-xg_result <- readRDS("Resultados_Modelos/xg_result.rds")
+xg_result <- readRDS("/home/renato/repos/Rossmann/inst/Resultados_Modelos/xg_result.rds")
 
 # Evaluate
 #xg_result <- ml_error("Xgboosting Model",xg_pred)
@@ -335,7 +334,7 @@ xg_result %>%
 
 ```{r}
 
-result_xg_cv <- readRDS("Resultados_Modelos/result_xg_cv.rds")
+result_xg_cv <- readRDS("/home/renato/repos/Rossmann/inst/Resultados_Modelos/result_xg_cv.rds")
 
 #result_xg_cv <- cross_validation(data_training , 5, "Xgboosting Model Cross Validation", xg)
 

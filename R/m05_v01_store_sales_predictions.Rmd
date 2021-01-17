@@ -75,10 +75,10 @@ robust_scaler <- function(x){
 ```{r}
 
 # Dataset of Sales
-df_sales_raw <- data.table::fread("Data/train.csv", stringsAsFactors = T,  na.strings = c("","'","NA"))
+df_sales_raw <- data.table::fread("/home/renato/repos/Rossmann/inst/Data/train.csv", stringsAsFactors = T,  na.strings = c("","'","NA"))
 
 # Dataset of Stores
-df_store_raw <- data.table::fread("Data/store.csv", stringsAsFactors = T,  na.strings=c("","'","NA"))
+df_store_raw <- data.table::fread("/home/renato/repos/Rossmann/inst/Data/store.csv", stringsAsFactors = T,  na.strings=c("","'","NA"))
 
 # merge
 df_raw <- merge(df_sales_raw, df_store_raw, by= "Store")
@@ -294,7 +294,7 @@ df2 <- df1
 ## Mindmap Hypotheses
 
 ```{r 2.1. Mindmap Hypotheses, echo=FALSE, fig.cap="Mindmap Hypotheses", out.width = '100%'}
-knitr::include_graphics("img/MindMapsHypothesis.png")
+knitr::include_graphics("/home/renato/repos/Rossmann/inst/img/MindMapsHypothesis.png")
 ```
 
 ## Creation of Hypotheses
@@ -774,7 +774,7 @@ df4 %>%
 
 ```{r, echo=FALSE}
 
-aux1 <- data.table::fread("Data/meigarom.csv") %>% 
+aux1 <- data.table::fread("/home/renato/repos/Rossmann/inst/Data/meigarom.csv") %>% 
   select(promo_time_week, sales)
 
 ```

@@ -39,10 +39,10 @@ library(htmltools)
 ```{r}
 
 # Dataset of Sales
-df_sales_raw <- data.table::fread("Data/train.csv", stringsAsFactors = T,  na.strings = c("","'","NA"))
+df_sales_raw <- data.table::fread("/home/renato/repos/Rossmann/inst/Data/train.csv", stringsAsFactors = T,  na.strings = c("","'","NA"))
 
 # Dataset of Stores
-df_store_raw <- data.table::fread("Data/store.csv", stringsAsFactors = T,  na.strings=c("","'","NA"))
+df_store_raw <- data.table::fread("/home/renato/repos/Rossmann/inst/Data/store.csv", stringsAsFactors = T,  na.strings=c("","'","NA"))
 
 # merge
 df_raw <- merge(df_sales_raw, df_store_raw, by= "Store")
