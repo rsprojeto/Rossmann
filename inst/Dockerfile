@@ -6,10 +6,10 @@ COPY init.R ./
 
 RUN Rscript init.R
 
-COPY xg_fit_final.rds plumber.R ./
+COPY app.R xg_fit_final.rds plumber.R ./
 
 EXPOSE 5000
 
 # CMD ["Rscript", "-e", "Rossmann::run_api(host='0.0.0.0', port=5000)"]
 
-ENTRYPOINT ["R", "-e", "source('Rossmann::run_api()')"]
+CMD RScript -e "Rossmann::rodar_api()"
