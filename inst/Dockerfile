@@ -12,4 +12,4 @@ EXPOSE 5000
 
 # CMD ["Rscript", "-e", "Rossmann::run_api(host='0.0.0.0', port=5000)"]
 
-CMD RScript -e "Rossmann::rodar_api()"
+CMD RScript -e "Rossmann::run_api()"
