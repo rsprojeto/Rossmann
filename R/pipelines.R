@@ -253,6 +253,6 @@ data_preparation <- function(df){
 
 #' @export
 run_api <- function(){
-  server <- plumber::plumb("plumber.R")
+  server <- plumber::plumb(system.file('plumber.R',package = "Rossmann"))
   server$run(host = '0.0.0.0',port = 5000,swagger = T)
 }
