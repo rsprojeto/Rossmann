@@ -6,6 +6,8 @@ COPY init.R ./
 
 RUN Rscript init.R
 
+RUN Rscript -e "remotes::install_github('rsprojeto/Rossmann')"
+
 COPY app.R xg_fit_final.rds plumber.R ./
 
 EXPOSE 5000

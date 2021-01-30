@@ -12,5 +12,5 @@ install.packages('stringr')
 install.packages('ISOweek')
 install.packages('fastDummies')
 
-devtools::install_github('rsprojeto/Rossmann')
+
 
