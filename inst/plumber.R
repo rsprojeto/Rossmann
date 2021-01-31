@@ -5,9 +5,9 @@ library(Rossmann)
 
 
 # Read model data.
-final_model <- readRDS(system.file("Resultados_Modelos/xg_fit_final.rds", package = "Rossmann"))
+#final_model <- readRDS(system.file("Resultados_Modelos/xg_fit_final.rds", package = "Rossmann"))
 
-#final_model <- readRDS("xg_fit_final.rds")
+final_model <- Rossmann::model_rossmann
 
 #* @parse json
 #* @param Id            
