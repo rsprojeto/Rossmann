@@ -2,17 +2,36 @@
 #' 
 #' @param request Internal parameter for `{shiny}`. 
 #'     DO NOT REMOVE.
-#' @import shiny
+#' @import shiny shinyMobile shinydashboard
 #' @noRd
 app_ui <- function(request) {
   tagList(
     # Leave this function for adding external resources
     golem_add_external_resources(),
     # List the first level UI elements here 
-    fluidPage(
-      h1("Rossmann")
+    
+    ui <- dashboardPage(
+      dashboardHeader(title = "Sales Forecast Rossmann"),
+      dashboardSidebar(
+        sidebarMenu(numericInput("store",label = "Number of Store", value = ""),
+                    actionButton("predict","Predict", icon = icon("crystal ball"), color="blue",
+                                 class = "btn-success", 
+                                 ),
+                    verbatimTextOutput("test")
+          
+         
+        )
+      ),
+      dashboardBody(
+        tabItems(
+          tabItem(tabName = "dashboard",
+                  h2("Dashboard tab content"))
+          )
+      )
     )
-  )
+    
+    )
+  
 }
 
 #' Add external Resources to the Application
