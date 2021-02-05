@@ -11,6 +11,7 @@ install.packages('dplyr')
 install.packages('stringr')
 install.packages('ISOweek')
 install.packages('fastDummies')
+install.packages('xgboost')
 
 
 

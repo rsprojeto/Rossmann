@@ -1,8 +1,9 @@
 library(plumber)
 library(tidyverse)
+library(magrittr)
+library(tidymodels)
+library(xgboost)
 
-# Read model data.
-final_model <- Rossmann::model_rossmann
 
 #* @parser json
 #* @param Id
@@ -18,15 +19,24 @@ final_model <- Rossmann::model_rossmann
 predictions <- function(req,Id , Store ,DayOfWeek , Date , Open , Promo , StateHoliday ,SchoolHoliday){
   
   
-  # Assigning types New dataset
-  Id                                   %<>% as.integer 
-  Store                                %<>% as.integer
-  DayOfWeek                            %<>% as.integer 
-  Date                                 %<>% as.character
-  Open                                 %<>% as.integer
-  Promo                                %<>% as.integer 
-  StateHoliday                         %<>% as.character
-  SchoolHoliday                        %<>% as.integer
+  # # Assigning types New dataset
+  # Id                                   %<>% as.integer 
+  # Store                                %<>% as.integer
+  # DayOfWeek                            %<>% as.integer 
+  # Date                                 %<>% as.character
+  # Open                                 %<>% as.integer
+  # Promo                                %<>% as.integer 
+  # StateHoliday                         %<>% as.character
+  # SchoolHoliday                        %<>% as.integer
+  
+  Id <- as.integer(Id)
+  Store <- as.integer(Store)
+  DayOfWeek <- as.integer(DayOfWeek)
+  Date <- as.character(Date)
+  Open <- as.integer(Open)
+  Promo <- as.integer(Promo)
+  StateHoliday <- as.character(StateHoliday )
+  SchoolHoliday <- as.integer(SchoolHoliday)
   
   # data frame with new data
   new_data <- tibble(Id = Id, Store = Store , DayOfWeek = DayOfWeek , Date = Date , Open = Open , Promo = Promo , 
@@ -58,8 +68,8 @@ predictions <- function(req,Id , Store ,DayOfWeek , Date , Open , Promo , StateH
   new_data <- Rossmann::data_preparation(new_data)
   
   # Making the prediction
-  new_data$predictions<- predict(final_model, new_data) %>% 
-    rename(predictions = .pred)
+  new_data$predictions<- predict(Rossmann::model_rossmann, new_data) %>% 
+    dplyr::rename(predictions = .pred)
   
   return(new_data)
   

@@ -2,7 +2,7 @@
 #' 
 #' @param request Internal parameter for `{shiny}`. 
 #'     DO NOT REMOVE.
-#' @import shiny shinyMobile shinydashboard
+#' @import shiny shinydashboard tidyverse
 #' @noRd
 app_ui <- function(request) {
   tagList(
@@ -15,18 +15,14 @@ app_ui <- function(request) {
       dashboardSidebar(
         sidebarMenu(numericInput("store",label = "Number of Store", value = ""),
                     actionButton("predict","Predict", icon = icon("crystal ball"), color="blue",
-                                 class = "btn-success", 
-                                 ),
-                    verbatimTextOutput("test")
+                                 class = "btn-success")
+                    
           
          
         )
       ),
       dashboardBody(
-        tabItems(
-          tabItem(tabName = "dashboard",
-                  h2("Dashboard tab content"))
-          )
+        verbatimTextOutput("test")
       )
     )
     

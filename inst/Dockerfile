@@ -8,7 +8,10 @@ RUN Rscript init.R
 
 RUN Rscript -e "remotes::install_github('rsprojeto/Rossmann')"
 
-COPY xg_fit_final.rds plumber.R ./
+#COPY app.R plumber.R ./
+
+WORKDIR /API/
+COPY [".", "./"]
 
 EXPOSE 5000
 
@@ -16,4 +19,4 @@ EXPOSE 5000
 
 #CMD [RScript -e "Rossmann::run_api()"]
 
-ENTRYPOINT ["Rscript","-e" ,"Rossmann::run_api()"]
+ENTRYPOINT ["R", "-e", "source('plumber.R')"]
